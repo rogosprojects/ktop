@@ -212,11 +212,25 @@ func (p *podPanel) DrawBody(data interface{}) {
 						},
 					)
 				} else {
-					cpuRatio = ui.GetRatio(float64(pod.PodUsageCpuQty.MilliValue()), float64(pod.PodRequestedCpuQty.MilliValue()))
+					// Check if CPU limit is set (non-zero), otherwise use node limit
+					var cpuDenominator float64
+					var cpuLimitLabel string
+					
+					if pod.PodLimitCpuQty != nil && pod.PodLimitCpuQty.MilliValue() > 0 {
+						// Use pod limit
+						cpuDenominator = float64(pod.PodLimitCpuQty.MilliValue())
+						cpuLimitLabel = fmt.Sprintf("%dm", pod.PodLimitCpuQty.MilliValue())
+					} else {
+						// Use node limit when pod limit is not set
+						cpuDenominator = float64(pod.NodeAllocatableCpuQty.MilliValue())
+						cpuLimitLabel = fmt.Sprintf("%dm*", pod.NodeAllocatableCpuQty.MilliValue())
+					}
+					
+					cpuRatio = ui.GetRatio(float64(pod.PodUsageCpuQty.MilliValue()), cpuDenominator)
 					cpuGraph = ui.BarGraph(10, cpuRatio, colorKeys)
 					cpuMetrics = fmt.Sprintf(
-						"[white][%s[white]] %dm/%dm (%1.0f%%)",
-						cpuGraph, pod.PodUsageCpuQty.MilliValue(), pod.PodRequestedCpuQty.MilliValue(), cpuRatio*100,
+						"[white][%s[white]] %dm/%s (%1.0f%%)",
+						cpuGraph, pod.PodUsageCpuQty.MilliValue(), cpuLimitLabel, cpuRatio*100,
 					)
 					p.list.SetCell(
 						rowIdx, colIdx,
@@ -240,13 +254,30 @@ func (p *podPanel) DrawBody(data interface{}) {
 						},
 					)
 				} else {
-					memRatio = ui.GetRatio(float64(pod.PodUsageMemQty.Value()), float64(pod.PodRequestedMemQty.Value()))
+					// Check if memory limit is set (non-zero), otherwise use node limit
+					var memDenominator float64
+					var memLimitLabel string
+					var memLimitScaled int64
+					
+					if pod.PodLimitMemQty != nil && pod.PodLimitMemQty.Value() > 0 {
+						// Use pod limit
+						memDenominator = float64(pod.PodLimitMemQty.Value())
+						memLimitScaled = pod.PodLimitMemQty.ScaledValue(resource.Mega)
+						memLimitLabel = fmt.Sprintf("%dMi", memLimitScaled)
+					} else {
+						// Use node limit when pod limit is not set
+						memDenominator = float64(pod.NodeAllocatableMemQty.Value())
+						memLimitScaled = pod.NodeAllocatableMemQty.ScaledValue(resource.Mega)
+						memLimitLabel = fmt.Sprintf("%dMi*", memLimitScaled)
+					}
+					
+					memRatio = ui.GetRatio(float64(pod.PodUsageMemQty.Value()), memDenominator)
 					memGraph = ui.BarGraph(10, memRatio, colorKeys)
 					memMetrics = fmt.Sprintf(
-						"[white][%s[white]] %dMi/%dMi (%1.0f%%)",
+						"[white][%s[white]] %dMi/%s (%1.0f%%)",
 						memGraph, 
 						pod.PodUsageMemQty.ScaledValue(resource.Mega), 
-						pod.PodRequestedMemQty.ScaledValue(resource.Mega), 
+						memLimitLabel, 
 						memRatio*100,
 					)
 					p.list.SetCell(
