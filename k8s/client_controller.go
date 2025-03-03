@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/vladimirvivien/ktop/views/model"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/informers"
 	appsV1Informers "k8s.io/client-go/informers/apps/v1"
 	batchV1Informers "k8s.io/client-go/informers/batch/v1"
@@ -44,6 +45,14 @@ type Controller struct {
 	SummaryRefreshInterval time.Duration
 	NodesRefreshInterval   time.Duration
 	PodsRefreshInterval    time.Duration
+
+	// Peak metrics tracking
+	PeakNodeCPU      map[string]*resource.Quantity // map of node name to peak CPU
+	PeakNodeMemory   map[string]*resource.Quantity // map of node name to peak Memory
+	PeakPodCPU       map[string]*resource.Quantity // map of pod key to peak CPU
+	PeakPodMemory    map[string]*resource.Quantity // map of pod key to peak Memory
+	PeakClusterCPU   *resource.Quantity            // peak cluster CPU usage
+	PeakClusterMemory *resource.Quantity           // peak cluster Memory usage
 }
 
 func newController(client *Client) *Controller {
@@ -52,6 +61,12 @@ func newController(client *Client) *Controller {
 		SummaryRefreshInterval: 5 * time.Second,
 		NodesRefreshInterval:   5 * time.Second,
 		PodsRefreshInterval:    3 * time.Second,
+		PeakNodeCPU:            make(map[string]*resource.Quantity),
+		PeakNodeMemory:         make(map[string]*resource.Quantity),
+		PeakPodCPU:             make(map[string]*resource.Quantity),
+		PeakPodMemory:          make(map[string]*resource.Quantity),
+		PeakClusterCPU:         resource.NewQuantity(0, resource.DecimalSI),
+		PeakClusterMemory:      resource.NewQuantity(0, resource.DecimalSI),
 	}
 	return ctrl
 }

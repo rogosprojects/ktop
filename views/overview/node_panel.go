@@ -228,10 +228,20 @@ func (p *nodePanel) DrawBody(data interface{}) {
 				} else {
 					cpuRatio = ui.GetRatio(float64(node.UsageCpuQty.MilliValue()), float64(node.AllocatableCpuQty.MilliValue()))
 					cpuGraph = ui.BarGraph(10, cpuRatio, colorKeys)
-					cpuMetrics = fmt.Sprintf(
-						"[white][%s[white]] %dm/%dm (%1.0f%%)",
-						cpuGraph, node.UsageCpuQty.MilliValue(), node.AllocatableCpuQty.MilliValue(), cpuRatio*100,
-					)
+					
+					// Get peak CPU for this node - show absolute value only
+					peakCPU, exists := client.Controller().PeakNodeCPU[node.Name]
+					if exists && peakCPU != nil {
+						cpuMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dm/%dm (%1.0f%%) [gray](Peak: %dm)[white]",
+							cpuGraph, node.UsageCpuQty.MilliValue(), node.AllocatableCpuQty.MilliValue(), cpuRatio*100, peakCPU.MilliValue(),
+						)
+					} else {
+						cpuMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dm/%dm (%1.0f%%)",
+							cpuGraph, node.UsageCpuQty.MilliValue(), node.AllocatableCpuQty.MilliValue(), cpuRatio*100,
+						)
+					}
 				}
 				
 				p.list.SetCell(
@@ -255,10 +265,20 @@ func (p *nodePanel) DrawBody(data interface{}) {
 				} else {
 					memRatio = ui.GetRatio(float64(node.UsageMemQty.MilliValue()), float64(node.AllocatableMemQty.MilliValue()))
 					memGraph = ui.BarGraph(10, memRatio, colorKeys)
-					memMetrics = fmt.Sprintf(
-						"[white][%s[white]] %dGi/%dGi (%1.0f%%)",
-						memGraph, node.UsageMemQty.ScaledValue(resource.Giga), node.AllocatableMemQty.ScaledValue(resource.Giga), memRatio*100,
-					)
+					
+					// Get peak Memory for this node - show absolute value only
+					peakMem, exists := client.Controller().PeakNodeMemory[node.Name]
+					if exists && peakMem != nil {
+						memMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dGi/%dGi (%1.0f%%) [gray](Peak: %dGi)[white]",
+							memGraph, node.UsageMemQty.ScaledValue(resource.Giga), node.AllocatableMemQty.ScaledValue(resource.Giga), memRatio*100, peakMem.ScaledValue(resource.Giga),
+						)
+					} else {
+						memMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dGi/%dGi (%1.0f%%)",
+							memGraph, node.UsageMemQty.ScaledValue(resource.Giga), node.AllocatableMemQty.ScaledValue(resource.Giga), memRatio*100,
+						)
+					}
 				}
 				
 				p.list.SetCell(

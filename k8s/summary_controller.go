@@ -68,8 +68,38 @@ func (c *Controller) refreshSummary(ctx context.Context, handlerFunc RefreshSumm
 		if err != nil {
 			metrics = new(metricsV1beta1.NodeMetrics)
 		}
+		
+		// Track node peaks
+		nodeName := node.Name
+		if _, exists := c.PeakNodeCPU[nodeName]; !exists {
+			c.PeakNodeCPU[nodeName] = resource.NewQuantity(0, resource.DecimalSI)
+		}
+		if _, exists := c.PeakNodeMemory[nodeName]; !exists {
+			c.PeakNodeMemory[nodeName] = resource.NewQuantity(0, resource.DecimalSI)
+		}
+		
+		// Update peaks if current usage is higher
+		if metrics.Usage.Cpu().Cmp(*c.PeakNodeCPU[nodeName]) > 0 {
+			cpuCopy := metrics.Usage.Cpu().DeepCopy()
+			c.PeakNodeCPU[nodeName] = &cpuCopy
+		}
+		if metrics.Usage.Memory().Cmp(*c.PeakNodeMemory[nodeName]) > 0 {
+			memCopy := metrics.Usage.Memory().DeepCopy()
+			c.PeakNodeMemory[nodeName] = &memCopy
+		}
+		
 		summary.UsageNodeMemTotal.Add(*metrics.Usage.Memory())
 		summary.UsageNodeCpuTotal.Add(*metrics.Usage.Cpu())
+	}
+	
+	// Update cluster-wide peak metrics
+	if summary.UsageNodeCpuTotal.Cmp(*c.PeakClusterCPU) > 0 {
+		cpuCopy := summary.UsageNodeCpuTotal.DeepCopy()
+		c.PeakClusterCPU = &cpuCopy
+	}
+	if summary.UsageNodeMemTotal.Cmp(*c.PeakClusterMemory) > 0 {
+		memCopy := summary.UsageNodeMemTotal.DeepCopy()
+		c.PeakClusterMemory = &memCopy
 	}
 
 	// extract pods summary

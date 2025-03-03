@@ -70,6 +70,12 @@ func (p *clusterSummaryPanel) DrawBody(data interface{}) {
 		var cpuRatio, memRatio ui.Ratio
 		var cpuGraph, memGraph string
 		var cpuMetrics, memMetrics string
+		var peakCpuInfo, peakMemInfo string
+		
+		// Get the peak values
+		peakCPU := client.Controller().PeakClusterCPU
+		peakMem := client.Controller().PeakClusterMemory
+		
 		if err := client.AssertMetricsAvailable(); err != nil { // metrics not available
 			cpuRatio = ui.GetRatio(float64(summary.RequestedPodCpuTotal.MilliValue()), float64(summary.AllocatableNodeCpuTotal.MilliValue()))
 			cpuGraph = ui.BarGraph(graphSize, cpuRatio, colorKeys)
@@ -91,6 +97,10 @@ func (p *clusterSummaryPanel) DrawBody(data interface{}) {
 				"CPU: [white][%s[white]] %dm/%dm (%02.1f%% used)",
 				cpuGraph, summary.UsageNodeCpuTotal.MilliValue(), summary.AllocatableNodeCpuTotal.MilliValue(), cpuRatio*100,
 			)
+			
+			// Add peak CPU info (absolute value only)
+			peakCpuInfo = fmt.Sprintf(" [white](Peak: %dm)[white]", 
+				peakCPU.MilliValue())
 
 			memRatio = ui.GetRatio(float64(summary.UsageNodeMemTotal.MilliValue()), float64(summary.AllocatableNodeMemTotal.MilliValue()))
 			memGraph = ui.BarGraph(graphSize, memRatio, colorKeys)
@@ -98,11 +108,15 @@ func (p *clusterSummaryPanel) DrawBody(data interface{}) {
 				"Memory: [white][%s[white]] %dGi/%dGi (%02.1f%% used)",
 				memGraph, summary.UsageNodeMemTotal.ScaledValue(resource.Giga), summary.AllocatableNodeMemTotal.ScaledValue(resource.Giga), memRatio*100,
 			)
+			
+			// Add peak Memory info (absolute value only)
+			peakMemInfo = fmt.Sprintf(" [white](Peak: %dGi)[white]", 
+				peakMem.ScaledValue(resource.Giga))
 		}
 
 		p.graphTable.SetCell(
 			0, 0,
-			tview.NewTableCell(cpuMetrics).
+			tview.NewTableCell(cpuMetrics + peakCpuInfo).
 				SetTextColor(tcell.ColorYellow).
 				SetAlign(tview.AlignLeft).
 				SetExpansion(100),
@@ -110,7 +124,7 @@ func (p *clusterSummaryPanel) DrawBody(data interface{}) {
 
 		p.graphTable.SetCell(
 			0, 1,
-			tview.NewTableCell(memMetrics).
+			tview.NewTableCell(memMetrics + peakMemInfo).
 				SetTextColor(tcell.ColorYellow).
 				SetAlign(tview.AlignLeft).
 				SetExpansion(100),

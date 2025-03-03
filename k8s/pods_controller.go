@@ -6,6 +6,7 @@ import (
 
 	"github.com/vladimirvivien/ktop/views/model"
 	coreV1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	metricsV1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
@@ -19,6 +20,17 @@ func (c *Controller) GetPodList(ctx context.Context) ([]*coreV1.Pod, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+// Helper function to calculate total CPU and memory usage from pod metrics
+func podMetricsTotals(metrics *metricsV1beta1.PodMetrics) (totalCpu, totalMem *resource.Quantity) {
+	totalCpu = resource.NewQuantity(0, resource.DecimalSI)
+	totalMem = resource.NewQuantity(0, resource.DecimalSI)
+	for _, c := range metrics.Containers {
+		totalCpu.Add(*c.Usage.Cpu())
+		totalMem.Add(*c.Usage.Memory())
+	}
+	return
 }
 
 func (c *Controller) GetPodModels(ctx context.Context) (models []model.PodModel, err error) {
@@ -47,6 +59,32 @@ func (c *Controller) GetPodModels(ctx context.Context) (models []model.PodModel,
 		nodeMetrics := nodeMetricsCache[pod.Spec.NodeName]
 
 		model := model.NewPodModel(pod, podMetrics, nodeMetrics)
+
+		// Track pod peak metrics
+		podKey := pod.Namespace + "/" + pod.Name
+		
+		if podMetrics.Containers != nil && len(podMetrics.Containers) > 0 {
+			// Get totals for CPU and memory
+			totalCpu, totalMem := podMetricsTotals(podMetrics)
+			
+			// Initialize peak tracking for this pod if needed
+			if _, exists := c.PeakPodCPU[podKey]; !exists {
+				c.PeakPodCPU[podKey] = resource.NewQuantity(0, resource.DecimalSI)
+			}
+			if _, exists := c.PeakPodMemory[podKey]; !exists {
+				c.PeakPodMemory[podKey] = resource.NewQuantity(0, resource.DecimalSI)
+			}
+			
+			// Update peaks if current usage is higher
+			if totalCpu.Cmp(*c.PeakPodCPU[podKey]) > 0 {
+				cpuCopy := totalCpu.DeepCopy()
+				c.PeakPodCPU[podKey] = &cpuCopy
+			}
+			if totalMem.Cmp(*c.PeakPodMemory[podKey]) > 0 {
+				memCopy := totalMem.DeepCopy()
+				c.PeakPodMemory[podKey] = &memCopy
+			}
+		}
 
 		// retrieve pod's node allocatable resources
 		if alloc, ok := nodeAllocResMap[pod.Spec.NodeName]; !ok {

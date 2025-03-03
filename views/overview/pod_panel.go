@@ -229,10 +229,22 @@ func (p *podPanel) DrawBody(data interface{}) {
 					
 					cpuRatio = ui.GetRatio(float64(pod.PodUsageCpuQty.MilliValue()), cpuDenominator)
 					cpuGraph = ui.BarGraph(10, cpuRatio, colorKeys)
-					cpuMetrics = fmt.Sprintf(
-						"[white][%s[white]] %dm/%s (%1.0f%%)",
-						cpuGraph, pod.PodUsageCpuQty.MilliValue(), cpuLimitLabel, cpuRatio*100,
-					)
+					
+					// Get peak CPU for this pod - show absolute value only
+					podKey := pod.Namespace + "/" + pod.Name
+					peakCPU, exists := client.Controller().PeakPodCPU[podKey]
+					if exists && peakCPU != nil {
+						cpuMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dm/%s (%1.0f%%) [gray](Peak: %dm)[white]",
+							cpuGraph, pod.PodUsageCpuQty.MilliValue(), cpuLimitLabel, cpuRatio*100, peakCPU.MilliValue(),
+						)
+					} else {
+						cpuMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dm/%s (%1.0f%%)",
+							cpuGraph, pod.PodUsageCpuQty.MilliValue(), cpuLimitLabel, cpuRatio*100,
+						)
+					}
+					
 					p.list.SetCell(
 						rowIdx, colIdx,
 						&tview.TableCell{
@@ -274,13 +286,29 @@ func (p *podPanel) DrawBody(data interface{}) {
 					
 					memRatio = ui.GetRatio(float64(pod.PodUsageMemQty.Value()), memDenominator)
 					memGraph = ui.BarGraph(10, memRatio, colorKeys)
-					memMetrics = fmt.Sprintf(
-						"[white][%s[white]] %dMi/%s (%1.0f%%)",
-						memGraph, 
-						pod.PodUsageMemQty.ScaledValue(resource.Mega), 
-						memLimitLabel, 
-						memRatio*100,
-					)
+					
+					// Get peak Memory for this pod - show absolute value only
+					podKey := pod.Namespace + "/" + pod.Name
+					peakMem, exists := client.Controller().PeakPodMemory[podKey]
+					if exists && peakMem != nil {
+						memMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dMi/%s (%1.0f%%) [gray](Peak: %dMi)[white]",
+							memGraph, 
+							pod.PodUsageMemQty.ScaledValue(resource.Mega), 
+							memLimitLabel, 
+							memRatio*100,
+							peakMem.ScaledValue(resource.Mega),
+						)
+					} else {
+						memMetrics = fmt.Sprintf(
+							"[white][%s[white]] %dMi/%s (%1.0f%%)",
+							memGraph, 
+							pod.PodUsageMemQty.ScaledValue(resource.Mega), 
+							memLimitLabel, 
+							memRatio*100,
+						)
+					}
+					
 					p.list.SetCell(
 						rowIdx, colIdx,
 						&tview.TableCell{
