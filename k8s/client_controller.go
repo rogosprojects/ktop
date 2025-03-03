@@ -39,10 +39,20 @@ type Controller struct {
 	nodeRefreshFunc    RefreshNodesFunc
 	podRefreshFunc     RefreshPodsFunc
 	summaryRefreshFunc RefreshSummaryFunc
+
+	// Refresh intervals
+	SummaryRefreshInterval time.Duration
+	NodesRefreshInterval   time.Duration
+	PodsRefreshInterval    time.Duration
 }
 
 func newController(client *Client) *Controller {
-	ctrl := &Controller{client: client}
+	ctrl := &Controller{
+		client:                 client,
+		SummaryRefreshInterval: 5 * time.Second,
+		NodesRefreshInterval:   5 * time.Second,
+		PodsRefreshInterval:    3 * time.Second,
+	}
 	return ctrl
 }
 

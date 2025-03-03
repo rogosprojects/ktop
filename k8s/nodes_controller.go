@@ -87,7 +87,7 @@ func (c *Controller) assertNodeAuthz(ctx context.Context) error {
 func (c *Controller) setupNodeHandler(ctx context.Context, handlerFunc RefreshNodesFunc) {
 	go func() {
 		c.refreshNodes(ctx, handlerFunc) // initial refresh
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(c.NodesRefreshInterval)
 		defer ticker.Stop()
 		for {
 			select {

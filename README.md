@@ -116,6 +116,9 @@ Flags:
       --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
   -s, --server string                  The address and port of the Kubernetes API server
       --show-all-columns               If true, show all columns (default true)
+      --summary-refresh int            Refresh interval for summary stats in seconds (default 5)
+      --nodes-refresh int              Refresh interval for node stats in seconds (default 5)
+      --pods-refresh int               Refresh interval for pod stats in seconds (default 3)
       --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
       --token string                   Bearer token for authentication to the API server
       --user string                    The name of the kubeconfig user to use
@@ -148,6 +151,22 @@ You can combine both filters:
 ```
 ktop --node-columns NAME,CPU,MEM --pod-columns NAMESPACE,POD,STATUS
 ```
+
+### Refresh Intervals
+
+You can customize the refresh intervals for different components to control how frequently ktop updates the displayed information:
+
+```
+ktop --summary-refresh 10 --nodes-refresh 8 --pods-refresh 5
+```
+
+Each refresh interval is specified in seconds:
+
+- `--summary-refresh`: Controls the refresh interval for cluster summary stats (default: 5 seconds)
+- `--nodes-refresh`: Controls the refresh interval for node stats (default: 5 seconds)
+- `--pods-refresh`: Controls the refresh interval for pod stats (default: 3 seconds)
+
+The current refresh rate is displayed in each panel's title for easy reference.
 
 Available node columns:
 - NAME

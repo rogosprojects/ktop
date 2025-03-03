@@ -96,7 +96,8 @@ func (p *podPanel) DrawBody(data interface{}) {
 	var cpuGraph, memGraph string
 	var cpuMetrics, memMetrics string
 
-	p.root.SetTitle(fmt.Sprintf("%s(%d) ", p.GetTitle(), len(pods)))
+	refreshTime := p.app.GetK8sClient().Controller().PodsRefreshInterval.Seconds()
+	p.root.SetTitle(fmt.Sprintf("%s(%d) [gray](refresh: %.0fs)[white]", p.GetTitle(), len(pods), refreshTime))
 	p.root.SetTitleAlign(tview.AlignLeft)
 
 	for rowIdx, pod := range pods {

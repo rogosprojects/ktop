@@ -46,11 +46,14 @@ func (p *clusterSummaryPanel) Layout(data interface{}) {
 	p.graphTable.SetTitleAlign(tview.AlignLeft)
 	p.graphTable.SetBorderColor(tcell.ColorWhite)
 
+	refreshTime := p.app.GetK8sClient().Controller().SummaryRefreshInterval.Seconds()
+	title := fmt.Sprintf("%s [gray](refresh: %.0fs)[white]", p.GetTitle(), refreshTime)
+	
 	root := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(p.summaryTable, 1, 1, true).
 		AddItem(p.graphTable, 1, 1, true)
 	root.SetBorder(true)
-	root.SetTitle(p.GetTitle())
+	root.SetTitle(title)
 	root.SetTitleAlign(tview.AlignLeft)
 	root.SetBorderPadding(0, 0, 0, 0)
 	p.root = root

@@ -14,7 +14,7 @@ import (
 func (c *Controller) setupSummaryHandler(ctx context.Context, handlerFunc RefreshSummaryFunc) {
 	go func() {
 		c.refreshSummary(ctx, handlerFunc)
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(c.SummaryRefreshInterval)
 		defer ticker.Stop()
 		for {
 			select {

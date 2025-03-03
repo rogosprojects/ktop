@@ -105,7 +105,8 @@ func (p *nodePanel) DrawBody(data interface{}) {
 	var cpuMetrics, memMetrics string
 	colorKeys := ui.ColorKeys{0: "green", 50: "yellow", 90: "red"}
 
-	p.root.SetTitle(fmt.Sprintf("%s(%d) ", p.GetTitle(), len(nodes)))
+	refreshTime := p.app.GetK8sClient().Controller().NodesRefreshInterval.Seconds()
+	p.root.SetTitle(fmt.Sprintf("%s(%d) [gray](refresh: %.0fs)[white]", p.GetTitle(), len(nodes), refreshTime))
 	p.root.SetTitleAlign(tview.AlignLeft)
 
 	for rowIdx, node := range nodes {

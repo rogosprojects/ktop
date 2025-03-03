@@ -72,7 +72,7 @@ func (c *Controller) installPodsHandler(ctx context.Context, refreshFunc Refresh
 	}
 	go func() {
 		c.refreshPods(ctx, refreshFunc) // initial refresh
-		ticker := time.NewTicker(3 * time.Second)
+		ticker := time.NewTicker(c.PodsRefreshInterval)
 		defer ticker.Stop()
 		for {
 			select {
