@@ -53,6 +53,9 @@ func (p *podPanel) Layout(_ interface{}) {
 		p.root.SetTitle(p.GetTitle())
 		p.root.SetTitleAlign(tview.AlignLeft)
 		p.laidout = true
+		
+		// Add the footer
+		p.DrawFooter(nil)
 	}
 }
 
@@ -66,12 +69,35 @@ func (p *podPanel) DrawHeader(data interface{}) {
 	p.colMap = make(map[string]int)
 	p.listCols = cols
 	
+	// Get the current sort field to highlight it
+	currentSortField := model.GetCurrentSortField()
+	sortDir := model.GetCurrentSortDirection()
+	
 	// Set column headers and build column map
 	for i, col := range p.listCols {
+		// Determine if this column is the one being sorted
+		isSortedCol := string(currentSortField) == col
+		
+		// Create header text, adding sort indicator if this is the sorted column
+		headerText := col
+		if isSortedCol {
+			if sortDir > 0 {
+				headerText = col + " ↑" // Ascending
+			} else {
+				headerText = col + " ↓" // Descending
+			}
+		}
+		
+		// Set background color to highlight the sorted column
+		bgColor := tcell.ColorDarkGreen
+		if isSortedCol {
+			bgColor = tcell.ColorDarkBlue // Highlight the sorted column
+		}
+		
 		p.list.SetCell(0, i,
-			tview.NewTableCell(col).
+			tview.NewTableCell(headerText).
 				SetTextColor(tcell.ColorWhite).
-				SetBackgroundColor(tcell.ColorDarkGreen).
+				SetBackgroundColor(bgColor).
 				SetAlign(tview.AlignLeft).
 				SetExpansion(100).
 				SetSelectable(false),
@@ -97,7 +123,18 @@ func (p *podPanel) DrawBody(data interface{}) {
 	var cpuMetrics, memMetrics string
 
 	refreshTime := p.app.GetK8sClient().Controller().PodsRefreshInterval.Seconds()
-	p.root.SetTitle(fmt.Sprintf("%s(%d) [gray](refresh: %.0fs)[white]", p.GetTitle(), len(pods), refreshTime))
+	
+	// Get current sort field and direction for display
+	sortField := model.GetCurrentSortField()
+	sortDir := model.GetCurrentSortDirection()
+	dirIndicator := "↑" // Ascending
+	if sortDir < 0 {
+		dirIndicator = "↓" // Descending
+	}
+	
+	// Add sort info to the title
+	p.root.SetTitle(fmt.Sprintf("%s(%d) [gray](refresh: %.0fs | sort: %s %s)[white]", 
+		p.GetTitle(), len(pods), refreshTime, string(sortField), dirIndicator))
 	p.root.SetTitleAlign(tview.AlignLeft)
 
 	for rowIdx, pod := range pods {
@@ -323,12 +360,39 @@ func (p *podPanel) DrawBody(data interface{}) {
 	}
 }
 
-func (p *podPanel) DrawFooter(_ interface{}) {}
+func (p *podPanel) DrawFooter(_ interface{}) {
+	// Add help text about column sorting in the footer
+	footerText := "[gray]Sort: [white]Shift+N[gray](namespace) [white]Shift+P[gray](pod) [white]Shift+M[gray](memory) [white]Shift+C[gray](cpu) [white]Shift+A[gray](age) [white]Shift+S[gray](status) [white]Shift+O[gray](node)"
+	
+	// Create a text view for the footer
+	footer := tview.NewTextView()
+	footer.SetText(footerText)
+	footer.SetTextAlign(tview.AlignLeft)
+	footer.SetDynamicColors(true)
+	
+	// Add the footer to the root flex container
+	if p.root != nil {
+		// Remove any existing footer first
+		for i := 0; i < p.root.GetItemCount(); i++ {
+			// Skip the main list view
+			if p.root.GetItem(i) == p.list {
+				continue
+			}
+			// Remove any other items (should be the footer)
+			p.root.RemoveItem(p.root.GetItem(i))
+			break
+		}
+		
+		// Add the new footer (using only 1 line)
+		p.root.AddItem(footer, 1, 0, false)
+	}
+}
 
 func (p *podPanel) Clear() {
 	p.list.Clear()
 	p.Layout(nil)
 	p.DrawHeader(p.listCols)
+	p.DrawFooter(nil) // Add the footer
 }
 
 func (p *podPanel) GetRootView() tview.Primitive {

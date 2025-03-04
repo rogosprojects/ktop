@@ -85,6 +85,38 @@ func (c *Controller) SetClusterSummaryRefreshFunc(fn RefreshSummaryFunc) *Contro
 	return c
 }
 
+// GetCurrentPodModels returns the current pod models for sorting/display
+// This is used when manually refreshing the pod display
+func (c *Controller) GetCurrentPodModels() []model.PodModel {
+	// Get a new context for this operation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	// Get the models
+	models, err := c.GetPodModels(ctx)
+	if err != nil {
+		// Return empty slice on error
+		return []model.PodModel{}
+	}
+	
+	return models
+}
+
+// TriggerPodRefresh manually triggers the pod refresh function
+// This is used when sorting pods
+func (c *Controller) TriggerPodRefresh() {
+	if c.podRefreshFunc == nil {
+		return
+	}
+	
+	// Create a context for the operation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	// Call refreshPods to get the latest data and update the display
+	c.refreshPods(ctx, c.podRefreshFunc)
+}
+
 func (c *Controller) Start(ctx context.Context, resync time.Duration) error {
 	if ctx == nil {
 		return errors.New("context cannot be nil")

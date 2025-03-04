@@ -2,7 +2,9 @@ package model
 
 import (
 	"fmt"
+	"math"
 	"sort"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -56,12 +58,168 @@ type ContainerStatusSummary struct {
 	SomeRunning bool
 }
 
+// SortField represents the field to sort pods by
+type SortField string
+
+// SortDirection represents ascending or descending sort order
+type SortDirection int
+
+const (
+	// Sort fields
+	SortFieldNamespace SortField = "NAMESPACE"
+	SortFieldName      SortField = "POD"
+	SortFieldStatus    SortField = "STATUS"
+	SortFieldAge       SortField = "AGE"
+	SortFieldNode      SortField = "NODE"
+	SortFieldReady     SortField = "READY"
+	SortFieldRestarts  SortField = "RESTARTS"
+	SortFieldCPU       SortField = "CPU"
+	SortFieldMemory    SortField = "MEMORY"
+	SortFieldIP        SortField = "IP"
+	SortFieldVolumes   SortField = "VOLS"
+
+	// Sort directions
+	SortAscending  SortDirection = 1
+	SortDescending SortDirection = -1
+)
+
+// Current sort settings
+var (
+	currentSortField     = SortFieldNamespace
+	currentSortDirection = SortAscending
+)
+
+// GetCurrentSortField returns the current field used for sorting
+func GetCurrentSortField() SortField {
+	return currentSortField
+}
+
+// GetCurrentSortDirection returns the current sort direction
+func GetCurrentSortDirection() SortDirection {
+	return currentSortDirection
+}
+
+// SetSortField sets the field to sort by
+func SetSortField(field SortField) {
+	// If we're setting to the same field, toggle direction
+	if currentSortField == field {
+		currentSortDirection *= -1
+	} else {
+		// When changing fields, default to ascending
+		currentSortField = field
+		currentSortDirection = SortAscending
+	}
+}
+
 func SortPodModels(pods []PodModel) {
+	direction := int(currentSortDirection)
+
 	sort.Slice(pods, func(i, j int) bool {
-		if pods[i].Namespace != pods[j].Namespace {
-			return pods[i].Namespace < pods[j].Namespace
+		// Handle each sort field differently
+		switch currentSortField {
+		case SortFieldNamespace:
+			if pods[i].Namespace != pods[j].Namespace {
+				return direction*strings.Compare(pods[i].Namespace, pods[j].Namespace) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldName:
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldStatus:
+			if pods[i].Status != pods[j].Status {
+				return direction*strings.Compare(pods[i].Status, pods[j].Status) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldAge:
+			ti, _ := time.ParseDuration(pods[i].TimeSince)
+			tj, _ := time.ParseDuration(pods[j].TimeSince)
+			if ti != tj {
+				// For age, larger duration means older, so reverse the comparison
+				return direction*int(tj.Seconds()-ti.Seconds()) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldNode:
+			if pods[i].Node != pods[j].Node {
+				return direction*strings.Compare(pods[i].Node, pods[j].Node) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldReady:
+			ratioI := float64(pods[i].ReadyContainers) / float64(pods[i].TotalContainers)
+			ratioJ := float64(pods[j].ReadyContainers) / float64(pods[j].TotalContainers)
+			if ratioI != ratioJ {
+				return direction*int(math.Float64bits(ratioJ)-math.Float64bits(ratioI)) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldRestarts:
+			if pods[i].Restarts != pods[j].Restarts {
+				return direction*(pods[i].Restarts-pods[j].Restarts) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldCPU:
+			// Handle null CPU metrics
+			if pods[i].PodUsageCpuQty == nil && pods[j].PodUsageCpuQty != nil {
+				return direction > 0 // nil values come first in ascending order
+			}
+			if pods[i].PodUsageCpuQty != nil && pods[j].PodUsageCpuQty == nil {
+				return direction < 0 // nil values come last in descending order
+			}
+			if pods[i].PodUsageCpuQty == nil && pods[j].PodUsageCpuQty == nil {
+				return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+			}
+			
+			// Both have CPU metrics, compare them
+			cpuI := pods[i].PodUsageCpuQty.MilliValue()
+			cpuJ := pods[j].PodUsageCpuQty.MilliValue()
+			if cpuI != cpuJ {
+				return direction*(int(cpuI-cpuJ)) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+
+		case SortFieldMemory:
+			// Handle null memory metrics
+			if pods[i].PodUsageMemQty == nil && pods[j].PodUsageMemQty != nil {
+				return direction > 0 // nil values come first in ascending order
+			}
+			if pods[i].PodUsageMemQty != nil && pods[j].PodUsageMemQty == nil {
+				return direction < 0 // nil values come last in descending order
+			}
+			if pods[i].PodUsageMemQty == nil && pods[j].PodUsageMemQty == nil {
+				return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+			}
+			
+			// Both have memory metrics, compare them
+			memI := pods[i].PodUsageMemQty.Value()
+			memJ := pods[j].PodUsageMemQty.Value()
+			if memI != memJ {
+				return direction*(int(memI-memJ)) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+			
+		case SortFieldIP:
+			if pods[i].IP != pods[j].IP {
+				return direction*strings.Compare(pods[i].IP, pods[j].IP) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+			
+		case SortFieldVolumes:
+			if pods[i].Volumes != pods[j].Volumes {
+				return direction*(pods[i].Volumes-pods[j].Volumes) < 0
+			}
+			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
+			
+		default:
+			// Default sort by namespace and name
+			if pods[i].Namespace != pods[j].Namespace {
+				return pods[i].Namespace < pods[j].Namespace
+			}
+			return pods[i].Name < pods[j].Name
 		}
-		return pods[i].Name < pods[j].Name
 	})
 }
 

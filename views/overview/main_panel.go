@@ -149,6 +149,23 @@ func (p *MainPanel) refreshPods(ctx context.Context, models []model.PodModel) er
 	return nil
 }
 
+// RefreshPods triggers a manual refresh of the pod view
+// This can be called to refresh the display after changing sort order
+func (p *MainPanel) RefreshPods() {
+	// Get the latest models from the controller
+	models := p.app.GetK8sClient().Controller().GetCurrentPodModels()
+	
+	// Sort and redraw
+	model.SortPodModels(models)
+	p.podPanel.Clear()
+	p.podPanel.DrawBody(models)
+	
+	// Refresh the screen
+	if p.refresh != nil {
+		p.refresh()
+	}
+}
+
 func (p *MainPanel) refreshWorkloadSummary(ctx context.Context, summary model.ClusterSummary) error {
 	p.clusterSummaryPanel.Clear()
 	p.clusterSummaryPanel.DrawBody(summary)

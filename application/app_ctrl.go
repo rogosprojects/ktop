@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/vladimirvivien/ktop/k8s"
 	"github.com/vladimirvivien/ktop/ui"
+	"github.com/vladimirvivien/ktop/views/model"
 )
 
 type AppPage struct {
@@ -64,7 +66,13 @@ func (app *Application) Focus(t tview.Primitive) {
 }
 
 func (app *Application) Refresh() {
-	app.refreshQ <- struct{}{}
+	// Use a timeout to ensure we don't block if the channel is full
+	select {
+	case app.refreshQ <- struct{}{}:
+		// Refresh message sent
+	case <-time.After(100 * time.Millisecond):
+		// Refresh timed out - channel might be full
+	}
 }
 
 func (app *Application) ShowPanel(i int) {
@@ -118,6 +126,81 @@ func (app *Application) setup(ctx context.Context) error {
 	app.panel.DrawFooter(app.getPageTitles()[app.visibleView])
 
 	app.tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Key press handling
+		
+		// Try to handle both Shift+key and uppercase key (in case shift handling is problematic)
+		handleSortKey := false
+		
+		// Check for uppercase letters (alternative to Shift+key)
+		isUppercaseKey := false
+		if event.Key() == tcell.KeyRune {
+			r := event.Rune()
+			if r >= 'A' && r <= 'Z' {
+				isUppercaseKey = true
+			}
+		}
+		
+		// Handle uppercase letters or explicit Shift+key combos
+		if (isUppercaseKey || event.Modifiers()&tcell.ModShift != 0) && app.visibleView == 0 {
+			handleSortKey = true
+		}
+		
+		if handleSortKey {
+			// Map keys to sort fields
+			var sortField string
+			switch event.Key() {
+			case tcell.KeyRune:
+				r := event.Rune()
+				// Convert uppercase to lowercase for checking
+				if r >= 'A' && r <= 'Z' {
+					r = r + ('a' - 'A')
+				}
+				
+				switch r {
+				case 'n': // Namespace
+					sortField = "NAMESPACE"
+				case 'p': // Pod name
+					sortField = "POD"
+				case 's': // Status
+					sortField = "STATUS"
+				case 'a': // Age
+					sortField = "AGE"
+				case 'o': // Node
+					sortField = "NODE"
+				case 'r': // Ready
+					sortField = "READY"
+				case 't': // Restarts
+					sortField = "RESTARTS"
+				case 'c': // CPU
+					sortField = "CPU"
+				case 'm': // Memory
+					sortField = "MEMORY"
+				case 'i': // IP
+					sortField = "IP"
+				case 'v': // Volumes
+					sortField = "VOLS"
+				default:
+					// Not a sort key, continue with normal event handling
+					break
+				}
+
+				if sortField != "" {
+					// Sort key detected
+					
+					// Update the sort field and trigger refresh
+					model.SetSortField(model.SortField(sortField))
+					
+					// Trigger pod refresh with our new sort order
+					app.k8sClient.Controller().TriggerPodRefresh()
+					
+					// Also refresh the UI to make sure everything is updated
+					app.Refresh()
+					
+					return nil
+				}
+			}
+		}
+
 		if event.Key() == tcell.KeyEsc {
 			app.Stop()
 		}
