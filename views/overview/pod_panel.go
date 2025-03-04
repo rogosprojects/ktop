@@ -39,12 +39,118 @@ func (p *podPanel) Layout(_ interface{}) {
 		p.list.SetFixed(1, 0)
 		p.list.SetBorder(false)
 		p.list.SetBorders(false)
-		p.list.SetFocusFunc(func() {
-			p.list.SetSelectable(true, false)
-			p.list.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorYellow).Foreground(tcell.ColorBlue))
+		
+		// Make the table selectable and scrollable
+		p.list.SetSelectable(true, false)
+		
+		// Create a subtle selection style that doesn't highlight the whole row
+		// Just use a different text color for the selected row
+		p.list.SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorRed))
+		
+		// Add key handlers for scrolling
+		p.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			_, _, _, height := p.list.GetInnerRect()
+			row, _ := p.list.GetSelection()
+			rowCount := p.list.GetRowCount()
+			pageSize := height - 1 // Subtract 1 for header row
+			
+			// Helper function to ensure the selected row is visible
+			ensureVisible := func(newRow int) {
+				// First select the row
+				p.list.Select(newRow, 0)
+				
+				// Now ensure it's in the visible area by setting the offset
+				// This effectively scrolls to make the selected row visible
+				currentRow, _ := p.list.GetOffset()
+				_, _, _, height := p.list.GetInnerRect()
+				visibleRows := height - 1 // Subtract header row
+				
+				// If the selected row is above the current view, scroll up
+				if newRow < currentRow {
+					p.list.SetOffset(newRow, 0)
+				}
+				// If the selected row is below the visible area, scroll down
+				if newRow >= currentRow+visibleRows {
+					p.list.SetOffset(newRow-visibleRows+1, 0)
+				}
+				
+				// Refresh the application to make the change visible
+				p.app.Refresh()
+			}
+			
+			switch event.Key() {
+			case tcell.KeyUp, tcell.KeyCtrlP:
+				// Move up one row
+				if row > 1 { // Don't go above the header row
+					ensureVisible(row - 1)
+				}
+				return nil
+			case tcell.KeyDown, tcell.KeyCtrlN:
+				// Move down one row
+				if row < rowCount-1 {
+					ensureVisible(row + 1)
+				}
+				return nil
+			case tcell.KeyPgUp:
+				// Page up
+				newRow := row - pageSize
+				if newRow < 1 {
+					newRow = 1 // Don't go above the header row
+				}
+				ensureVisible(newRow)
+				return nil
+			case tcell.KeyPgDn:
+				// Page down
+				newRow := row + pageSize
+				if newRow >= rowCount {
+					newRow = rowCount - 1
+				}
+				ensureVisible(newRow)
+				return nil
+			case tcell.KeyHome:
+				// Go to first pod (after header)
+				ensureVisible(1)
+				return nil
+			case tcell.KeyEnd:
+				// Go to last pod
+				ensureVisible(rowCount - 1)
+				return nil
+			}
+			return event
 		})
+		
+		p.list.SetFocusFunc(func() {
+			// Make sure we're selectable when focused
+			p.list.SetSelectable(true, false)
+			
+			// If no row is selected, select the first one
+			row, _ := p.list.GetSelection()
+			if row <= 0 && p.list.GetRowCount() > 1 {
+				p.list.Select(1, 0) // Select first row (after header)
+				p.list.ScrollToBeginning() // Make sure we're at the top
+			} else {
+				// Ensure the selected row is visible by adjusting the offset
+				currentRow, _ := p.list.GetOffset()
+				_, _, _, height := p.list.GetInnerRect()
+				visibleRows := height - 1 // Subtract header row
+				
+				// If the selected row is above the current view, scroll up
+				if row < currentRow {
+					p.list.SetOffset(row, 0)
+				}
+				// If the selected row is below the visible area, scroll down
+				if row >= currentRow+visibleRows {
+					p.list.SetOffset(row-visibleRows+1, 0)
+				}
+			}
+			
+			// Refresh to make sure changes are visible
+			p.app.Refresh()
+		})
+		
 		p.list.SetBlurFunc(func() {
-			p.list.SetSelectable(false, false)
+			// Keep selectable for visual indication even when blurred
+			p.list.SetSelectable(true, false)
 		})
 
 		p.root = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -132,6 +238,9 @@ func (p *podPanel) DrawBody(data interface{}) {
 		dirIndicator = "↓" // Descending
 	}
 	
+	// Record the currently selected row before redrawing
+	selectedRow, _ := p.list.GetSelection()
+	
 	// Add sort info to the title
 	p.root.SetTitle(fmt.Sprintf("%s(%d) [gray](refresh: %.0fs | sort: %s %s)[white]", 
 		p.GetTitle(), len(pods), refreshTime, string(sortField), dirIndicator))
@@ -139,6 +248,13 @@ func (p *podPanel) DrawBody(data interface{}) {
 
 	for rowIdx, pod := range pods {
 		rowIdx++ // offset for header row
+		
+		// Add a cursor indicator for the row if it matches the previously selected row
+		isSelectedRow := (rowIdx == selectedRow)
+		rowPrefix := "  " // Default indentation
+		if isSelectedRow {
+			rowPrefix = "→ " // Arrow indicator for selected row
+		}
 		
 		// Render each column that is included in the filtered view
 		for _, colName := range p.listCols {
@@ -149,10 +265,17 @@ func (p *podPanel) DrawBody(data interface{}) {
 			
 			switch colName {
 			case "NAMESPACE":
+				// Add selection indicator to the first column (namespace column)
+				cellText := pod.Namespace
+				if colIdx == 0 {
+					// Add our indicator prefix only to the first column
+					cellText = rowPrefix + cellText
+				}
+				
 				p.list.SetCell(
 					rowIdx, colIdx,
 					&tview.TableCell{
-						Text:  pod.Namespace,
+						Text:  cellText,
 						Color: tcell.ColorYellow,
 						Align: tview.AlignLeft,
 					},
@@ -361,8 +484,9 @@ func (p *podPanel) DrawBody(data interface{}) {
 }
 
 func (p *podPanel) DrawFooter(_ interface{}) {
-	// Add help text about column sorting in the footer
-	footerText := "[gray]Sort: [white]Shift+N[gray](namespace) [white]Shift+P[gray](pod) [white]Shift+M[gray](memory) [white]Shift+C[gray](cpu) [white]Shift+A[gray](age) [white]Shift+S[gray](status) [white]Shift+O[gray](node)"
+	// Updated footer text to emphasize that only pod panel is scrollable
+	footerText := "[gray]Sort: [white]Shift+N[gray](namespace) [white]Shift+P[gray](pod) [white]Shift+M[gray](memory) [white]Shift+C[gray](cpu) " +
+		"| [white]Pod List Scrolling: [white]↑↓[gray](move) [white]PgUp/PgDn[gray](page) [white]Home/End[gray](first/last)"
 	
 	// Create a text view for the footer
 	footer := tview.NewTextView()
@@ -393,6 +517,14 @@ func (p *podPanel) Clear() {
 	p.Layout(nil)
 	p.DrawHeader(p.listCols)
 	p.DrawFooter(nil) // Add the footer
+	
+	// Ensure we're at the beginning when clearing
+	p.list.ScrollToBeginning()
+	
+	// Select first row if we have data
+	if p.list.GetRowCount() > 1 {
+		p.list.Select(1, 0)
+	}
 }
 
 func (p *podPanel) GetRootView() tview.Primitive {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -66,12 +65,14 @@ func (app *Application) Focus(t tview.Primitive) {
 }
 
 func (app *Application) Refresh() {
-	// Use a timeout to ensure we don't block if the channel is full
+	// Use a non-blocking send to prevent UI deadlocks
+	// If channel is full, we'll drop this refresh and let the next scheduled refresh happen
 	select {
 	case app.refreshQ <- struct{}{}:
-		// Refresh message sent
-	case <-time.After(100 * time.Millisecond):
-		// Refresh timed out - channel might be full
+		// Refresh message sent successfully
+	default:
+		// Channel is full, log or handle if needed
+		// This is intentionally non-blocking to prevent UI freezes
 	}
 }
 
@@ -85,7 +86,7 @@ func (app *Application) GetStopChan() <-chan struct{} {
 
 func (app *Application) WelcomeBanner() {
 	fmt.Println(`
- _    _ 
+ _    _
 | | _| |_ ___  _ __
 | |/ / __/ _ \| '_ \
 |   <| || (_) | |_) |
@@ -128,9 +129,14 @@ func (app *Application) setup(ctx context.Context) error {
 	app.tviewApp.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// Key press handling
 		
+		// Ignore any key events with Command/Ctrl/Alt modifiers to prevent panel disappearing
+		if event.Modifiers()&(tcell.ModCtrl|tcell.ModMeta|tcell.ModAlt) != 0 {
+			return event
+		}
+
 		// Try to handle both Shift+key and uppercase key (in case shift handling is problematic)
 		handleSortKey := false
-		
+
 		// Check for uppercase letters (alternative to Shift+key)
 		isUppercaseKey := false
 		if event.Key() == tcell.KeyRune {
@@ -139,12 +145,14 @@ func (app *Application) setup(ctx context.Context) error {
 				isUppercaseKey = true
 			}
 		}
-		
+
 		// Handle uppercase letters or explicit Shift+key combos
-		if (isUppercaseKey || event.Modifiers()&tcell.ModShift != 0) && app.visibleView == 0 {
+		// Only process if it's a pure Shift key or uppercase letter
+		modIsOnlyShift := event.Modifiers() == tcell.ModShift
+		if (isUppercaseKey || modIsOnlyShift) && app.visibleView == 0 {
 			handleSortKey = true
 		}
-		
+
 		if handleSortKey {
 			// Map keys to sort fields
 			var sortField string
@@ -155,7 +163,7 @@ func (app *Application) setup(ctx context.Context) error {
 				if r >= 'A' && r <= 'Z' {
 					r = r + ('a' - 'A')
 				}
-				
+
 				switch r {
 				case 'n': // Namespace
 					sortField = "NAMESPACE"
@@ -186,16 +194,31 @@ func (app *Application) setup(ctx context.Context) error {
 
 				if sortField != "" {
 					// Sort key detected
-					
+
 					// Update the sort field and trigger refresh
 					model.SetSortField(model.SortField(sortField))
+
+					// Store the current title to maintain page visibility
+					currentTitle := app.getPageTitles()[app.visibleView]
 					
-					// Trigger pod refresh with our new sort order
-					app.k8sClient.Controller().TriggerPodRefresh()
-					
+					// Trigger pod refresh with our new sort order and handle any errors
+					err := app.k8sClient.Controller().TriggerPodRefresh()
+					if err != nil {
+						// Even if there's an error, we still want to refresh
+						// with whatever data we have so far
+						// But we don't change the page/panel
+						app.panel.DrawFooter(currentTitle)
+					} else {
+						// Keep the same page visible - don't switch pages
+						app.panel.DrawFooter(currentTitle)
+					}
+
 					// Also refresh the UI to make sure everything is updated
 					app.Refresh()
 					
+					// Show sorting info in footer instead of changing pages
+					app.panel.showSortInfo(fmt.Sprintf("Sort by %s", sortField))
+
 					return nil
 				}
 			}
@@ -206,11 +229,12 @@ func (app *Application) setup(ctx context.Context) error {
 		}
 
 		if event.Key() == tcell.KeyTAB {
+			// Since GetChildrenViews now only returns the pod panel,
+			// we can simply get the first item in the views list
 			views := app.pages[0].Panel.GetChildrenViews()
-			app.tabIdx++
-			app.Focus(views[app.tabIdx])
-			if app.tabIdx == len(views)-1 {
-				app.tabIdx = -1
+			if len(views) > 0 {
+				// Focus on the first (and only) item - the pod panel
+				app.Focus(views[0])
 			}
 		}
 

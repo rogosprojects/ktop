@@ -88,13 +88,21 @@ func (c *Controller) SetClusterSummaryRefreshFunc(fn RefreshSummaryFunc) *Contro
 // GetCurrentPodModels returns the current pod models for sorting/display
 // This is used when manually refreshing the pod display
 func (c *Controller) GetCurrentPodModels() []model.PodModel {
-	// Get a new context for this operation
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Get a new context for this operation with a longer timeout to accommodate larger clusters
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	
 	// Get the models
 	models, err := c.GetPodModels(ctx)
 	if err != nil {
+		// Log the error or handle it appropriately
+		if ctx.Err() == context.DeadlineExceeded {
+			// Timeout error - this means we have too many pods to process in time
+			// Return whatever we have managed to collect so far
+			if len(models) > 0 {
+				return models
+			}
+		}
 		// Return empty slice on error
 		return []model.PodModel{}
 	}
@@ -104,17 +112,28 @@ func (c *Controller) GetCurrentPodModels() []model.PodModel {
 
 // TriggerPodRefresh manually triggers the pod refresh function
 // This is used when sorting pods
-func (c *Controller) TriggerPodRefresh() {
+func (c *Controller) TriggerPodRefresh() error {
 	if c.podRefreshFunc == nil {
-		return
+		return errors.New("pod refresh function not set")
 	}
 	
-	// Create a context for the operation
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Create a context for the operation with a longer timeout for large clusters
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	
 	// Call refreshPods to get the latest data and update the display
-	c.refreshPods(ctx, c.podRefreshFunc)
+	err := c.refreshPods(ctx, c.podRefreshFunc)
+	if err != nil {
+		// Check if this is a timeout error
+		if ctx.Err() == context.DeadlineExceeded {
+			// This is a timeout - we've processed as many pods as we could in the time available
+			// Return a specific error so callers can handle it appropriately
+			return errors.New("pod refresh timed out - partial results may be displayed")
+		}
+		return err
+	}
+	
+	return nil
 }
 
 func (c *Controller) Start(ctx context.Context, resync time.Duration) error {

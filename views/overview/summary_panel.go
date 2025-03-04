@@ -39,12 +39,14 @@ func (p *clusterSummaryPanel) Layout(data interface{}) {
 	p.summaryTable.SetBorders(false)
 	p.summaryTable.SetTitleAlign(tview.AlignLeft)
 	p.summaryTable.SetBorderColor(tcell.ColorWhite)
-
+	p.summaryTable.SetSelectable(false, false) // Disable interactions
+	
 	p.graphTable = tview.NewTable()
 	p.graphTable.SetBorder(false)
 	p.graphTable.SetBorders(false)
 	p.graphTable.SetTitleAlign(tview.AlignLeft)
 	p.graphTable.SetBorderColor(tcell.ColorWhite)
+	p.graphTable.SetSelectable(false, false) // Disable interactions
 
 	refreshTime := p.app.GetK8sClient().Controller().SummaryRefreshInterval.Seconds()
 	title := fmt.Sprintf("%s [gray](refresh: %.0fs)[white]", p.GetTitle(), refreshTime)

@@ -62,11 +62,11 @@ func (c *Controller) GetPodModels(ctx context.Context) (models []model.PodModel,
 
 		// Track pod peak metrics
 		podKey := pod.Namespace + "/" + pod.Name
-		
+
 		if podMetrics.Containers != nil && len(podMetrics.Containers) > 0 {
 			// Get totals for CPU and memory
 			totalCpu, totalMem := podMetricsTotals(podMetrics)
-			
+
 			// Initialize peak tracking for this pod if needed
 			if _, exists := c.PeakPodCPU[podKey]; !exists {
 				c.PeakPodCPU[podKey] = resource.NewQuantity(0, resource.DecimalSI)
@@ -74,7 +74,7 @@ func (c *Controller) GetPodModels(ctx context.Context) (models []model.PodModel,
 			if _, exists := c.PeakPodMemory[podKey]; !exists {
 				c.PeakPodMemory[podKey] = resource.NewQuantity(0, resource.DecimalSI)
 			}
-			
+
 			// Update peaks if current usage is higher
 			if totalCpu.Cmp(*c.PeakPodCPU[podKey]) > 0 {
 				cpuCopy := totalCpu.DeepCopy()
@@ -128,6 +128,13 @@ func (c *Controller) installPodsHandler(ctx context.Context, refreshFunc Refresh
 func (c *Controller) refreshPods(ctx context.Context, refreshFunc RefreshPodsFunc) error {
 	models, err := c.GetPodModels(ctx)
 	if err != nil {
+		// Check if this is a context timeout error
+		if ctx.Err() == context.DeadlineExceeded {
+			// If we got some models despite timeout, use them for partial refresh
+			if len(models) > 0 {
+				refreshFunc(ctx, models)
+			}
+		}
 		return err
 	}
 	refreshFunc(ctx, models)

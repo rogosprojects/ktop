@@ -177,7 +177,9 @@ func SortPodModels(pods []PodModel) {
 			cpuI := pods[i].PodUsageCpuQty.MilliValue()
 			cpuJ := pods[j].PodUsageCpuQty.MilliValue()
 			if cpuI != cpuJ {
-				return direction*(int(cpuI-cpuJ)) < 0
+				// Reverse the comparison for CPU sorting to match memory behavior
+				// Higher values appear at the top in ascending order (opposite of normal)
+				return direction*(int(cpuJ-cpuI)) < 0
 			}
 			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
 
@@ -197,7 +199,9 @@ func SortPodModels(pods []PodModel) {
 			memI := pods[i].PodUsageMemQty.Value()
 			memJ := pods[j].PodUsageMemQty.Value()
 			if memI != memJ {
-				return direction*(int(memI-memJ)) < 0
+				// Reverse the comparison for memory sorting
+				// Higher values appear at the top in ascending order (opposite of normal)
+				return direction*(int(memJ-memI)) < 0
 			}
 			return direction*strings.Compare(pods[i].Name, pods[j].Name) < 0
 			

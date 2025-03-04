@@ -11,11 +11,19 @@ All notable changes to the ktop project will be documented in this file.
   - Visual indicators showing current sort column and direction
   - Toggle between ascending/descending order by pressing same key twice
 - Footer help text showing available sort keys
+- Scrollable pod list with keyboard navigation
+  - Arrow keys for basic navigation
+  - PgUp/PgDn for page-based scrolling
+  - Home/End for jumping to first/last entries
+  - Subtle row selection with arrow indicator
 
 ### Changed
 - Improved UI refresh mechanism with timeout handling
 - Enhanced pod panel to show sort direction indicators in column headers
 - Added highlighting for the currently sorted column
+- Simplified interaction model with only pod panel being interactive
+- Made node and cluster summary panels view-only (non-interactive)
+- Updated TAB key to always focus on the pod panel
 
 ## [Previous Releases]
 

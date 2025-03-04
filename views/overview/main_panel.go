@@ -83,11 +83,11 @@ func (p *MainPanel) Layout(data interface{}) {
 	}
 
 	view := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(p.clusterSummaryPanel.GetRootView(), 4, 1, true).
+		AddItem(p.clusterSummaryPanel.GetRootView(), 4, 1, false). // Not focusable
 		AddItem(
 			tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(p.nodePanel.GetRootView(), 0, 2, true).
-				AddItem(p.podPanel.GetRootView(), 0, 3, true),
+				AddItem(p.nodePanel.GetRootView(), 0, 2, false). // Not focusable
+				AddItem(p.podPanel.GetRootView(), 0, 3, true), // Only the pod panel is focusable
 			0, 1, true)
 
 	p.root = view
@@ -105,7 +105,11 @@ func (p *MainPanel) GetRootView() tview.Primitive {
 	return p.root
 }
 func (p *MainPanel) GetChildrenViews() []tview.Primitive {
-	return p.children
+	// Return only the pod panel to ensure only it can be focused
+	// This is an alternative way to make only the pod panel interactive
+	return []tview.Primitive{
+		p.podPanel.GetRootView(),
+	}
 }
 
 func (p *MainPanel) Run(ctx context.Context) error {
@@ -152,8 +156,21 @@ func (p *MainPanel) refreshPods(ctx context.Context, models []model.PodModel) er
 // RefreshPods triggers a manual refresh of the pod view
 // This can be called to refresh the display after changing sort order
 func (p *MainPanel) RefreshPods() {
-	// Get the latest models from the controller
-	models := p.app.GetK8sClient().Controller().GetCurrentPodModels()
+	// Create a context with a reasonable timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// Use the context-aware method for consistency
+	models, err := p.app.GetK8sClient().Controller().GetPodModels(ctx)
+	if err != nil {
+		// If we got a timeout but have partial results, use them
+		if ctx.Err() == context.DeadlineExceeded && len(models) > 0 {
+			// Continue with partial results
+		} else if err != nil {
+			// Fall back to the simpler method if needed
+			models = p.app.GetK8sClient().Controller().GetCurrentPodModels()
+		}
+	}
 	
 	// Sort and redraw
 	model.SortPodModels(models)

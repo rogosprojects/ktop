@@ -36,11 +36,25 @@ func (p *nodePanel) Layout(_ interface{}) {
 		p.list.SetFixed(1, 0)
 		p.list.SetBorder(false)
 		p.list.SetBorders(false)
-		p.list.SetFocusFunc(func() {
-			p.list.SetSelectable(true, false)
-			p.list.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorYellow).Foreground(tcell.ColorBlue))
+		
+		// Disable interactions for node panel
+		p.list.SetSelectable(false, false)
+		
+		// No input capture functionality for node panel
+		p.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			// Pass all events through without handling
+			return event
 		})
+		
+		// Simplified focus handler - no interaction needed
+		p.list.SetFocusFunc(func() {
+			// Not selectable when focused
+			p.list.SetSelectable(false, false)
+		})
+		
+		// Simplified blur handler - no interaction needed
 		p.list.SetBlurFunc(func() {
+			// Not selectable when blurred
 			p.list.SetSelectable(false, false)
 		})
 
@@ -104,6 +118,9 @@ func (p *nodePanel) DrawBody(data interface{}) {
 	var cpuGraph, memGraph string
 	var cpuMetrics, memMetrics string
 	colorKeys := ui.ColorKeys{0: "green", 50: "yellow", 90: "red"}
+	
+	// Record the currently selected row before redrawing
+	selectedRow, _ := p.list.GetSelection()
 
 	refreshTime := p.app.GetK8sClient().Controller().NodesRefreshInterval.Seconds()
 	p.root.SetTitle(fmt.Sprintf("%s(%d) [gray](refresh: %.0fs)[white]", p.GetTitle(), len(nodes), refreshTime))
@@ -112,10 +129,18 @@ func (p *nodePanel) DrawBody(data interface{}) {
 	for rowIdx, node := range nodes {
 		rowIdx++ // offset for header-row
 		
+		// Add a cursor indicator for the row if it matches the previously selected row
+		isSelectedRow := (rowIdx == selectedRow)
+		
 		// Always render the legend column
 		controlLegend := ""
 		if node.Controller {
 			controlLegend = fmt.Sprintf("%c", ui.Icons.TrafficLight)
+		}
+		
+		// If this is the selected row, add an arrow indicator to the legend
+		if isSelectedRow {
+			controlLegend = "→" + controlLegend
 		}
 		
 		p.list.SetCell(
@@ -300,6 +325,14 @@ func (p *nodePanel) Clear() {
 	p.list.Clear()
 	p.Layout(nil)
 	p.DrawHeader(p.listCols)
+	
+	// Ensure we're at the beginning when clearing
+	p.list.ScrollToBeginning()
+	
+	// Select first row if we have data
+	if p.list.GetRowCount() > 1 {
+		p.list.Select(1, 0)
+	}
 }
 
 func (p *nodePanel) GetRootView() tview.Primitive {

@@ -139,3 +139,16 @@ func (p *appPanel) switchToPage(title string) {
 func (p *appPanel) showModalView(t tview.Primitive) {
 	p.tviewApp.SetRoot(t, false)
 }
+
+// showSortInfo updates the footer with sorting information
+// without changing the current page
+func (p *appPanel) showSortInfo(info string) {
+	// Update the header text with the sort information instead of changing pages
+	p.header.SetCell(
+		1, 0,
+		tview.NewTableCell(info).
+			SetTextColor(tcell.ColorGreen).
+			SetAlign(tview.AlignLeft).
+			SetExpansion(100),
+	)
+}
